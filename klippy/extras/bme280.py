@@ -124,7 +124,7 @@ class BME280:
         self._callback = cb
 
     def get_report_time_delta(self):
-        return REPORT_TIME
+        return REPORT_TIME * 5
 
     def _init_bmxx80(self):
         def read_calibration_data_bmp280(calib_data_1):
@@ -332,7 +332,7 @@ class BME280:
                 % (self.temp, self.min_temp, self.max_temp))
         measured_time = self.reactor.monotonic()
         self._callback(self.mcu.estimated_print_time(measured_time), self.temp)
-        return measured_time + REPORT_TIME
+        return measured_time + REPORT_TIME * 5
 
     def _compensate_temp(self, raw_temp):
         dig = self.dig
