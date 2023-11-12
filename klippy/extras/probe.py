@@ -19,6 +19,7 @@ class PrinterProbe:
         self.name = config.get_name()
         self.mcu_probe = mcu_probe
         self.speed = config.getfloat('speed', 5.0, above=0.)
+        self.touchdown_speed = config.getfloat('touchdown_speed', None, above=0)
         self.lift_speed = config.getfloat('lift_speed', self.speed, above=0.)
         self.x_offset = config.getfloat('x_offset', 0.)
         self.y_offset = config.getfloat('y_offset', 0.)
@@ -371,6 +372,7 @@ class ProbePointsHelper:
         self.lift_speed = self.speed
         self.probe_offsets = (0., 0., 0.)
         self.results = []
+        self.probe = None
     def minimum_points(self,n):
         if len(self.probe_points) < n:
             raise self.printer.config_error(
@@ -403,36 +405,39 @@ class ProbePointsHelper:
             nextpos[0] -= self.probe_offsets[0]
             nextpos[1] -= self.probe_offsets[1]
         toolhead.manual_move(nextpos, self.speed)
+        if self.probe.touchdown_speed is not None:
+            self.probe._probe(speed=self.probe.touchdown_speed)
+            toolhead.manual_move([None, None, self.probe.sample_retract_dist * 2], self.probe.lift_speed)
         return False
     def start_probe(self, gcmd):
         manual_probe.verify_no_manual_probe(self.printer)
         # Lookup objects
-        probe = self.printer.lookup_object('probe', None)
+        self.probe = self.printer.lookup_object('probe', None)
         method = gcmd.get('METHOD', 'automatic').lower()
         self.results = []
         def_move_z = self.default_horizontal_move_z
         self.horizontal_move_z = gcmd.get_float('HORIZONTAL_MOVE_Z',
                                                 def_move_z)
-        if probe is None or method != 'automatic':
+        if self.probe is None or method != 'automatic':
             # Manual probe
             self.lift_speed = self.speed
             self.probe_offsets = (0., 0., 0.)
             self._manual_probe_start()
             return
         # Perform automatic probing
-        self.lift_speed = probe.get_lift_speed(gcmd)
-        self.probe_offsets = probe.get_offsets()
+        self.lift_speed = self.probe.get_lift_speed(gcmd)
+        self.probe_offsets = self.probe.get_offsets()
         if self.horizontal_move_z < self.probe_offsets[2]:
             raise gcmd.error("horizontal_move_z can't be less than"
                              " probe's z_offset")
-        probe.multi_probe_begin()
+        self.probe.multi_probe_begin()
         while 1:
             done = self._move_next()
             if done:
                 break
-            pos = probe.run_probe(gcmd)
+            pos = self.probe.run_probe(gcmd)
             self.results.append(pos)
-        probe.multi_probe_end()
+        self.probe.multi_probe_end()
     def _manual_probe_start(self):
         done = self._move_next()
         if not done:
